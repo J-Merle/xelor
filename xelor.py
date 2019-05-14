@@ -21,7 +21,8 @@ def scan():
 @cli.command()
 @click.option("--port", required=True, type=int)
 @click.option("--contains")
-def chat(port, contains):
+@click.option('--raw', is_flag=True)
+def chat(port, contains, raw):
     if contains:
         contains = [word.lower() for word in contains.split("|")]
     _filter = "tcp.port==" + str(port)
@@ -30,6 +31,8 @@ def chat(port, contains):
     for item in pipe.stdout:
         item = item.strip()
         if len(item) > 0 and item[:3] == b"0dc":
+            if raw:
+                print(item)
             message = ChatMessage(item)
             if contains:
                 for word in contains:
@@ -44,6 +47,8 @@ canals = {9: "Guilde", 2: "Privé", 6: "Recrutement", 5: "Commerce", 14: "FR", 0
 
 
 def hexa_to_int(bytes_data):
+    if not bytes_data:
+        return 0
     return int(bytes_data.decode("utf8"), 16)
 
 
