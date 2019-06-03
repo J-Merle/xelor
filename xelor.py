@@ -1,8 +1,11 @@
 import codecs
+import struct
 from os import popen
-from subprocess import PIPE, Popen, check_output
+from subprocess import PIPE, Popen
 
 import click
+
+BIT_MASK = 3
 
 
 @click.group()
@@ -21,56 +24,74 @@ def scan():
 @cli.command()
 @click.option("--port", required=True, type=int)
 @click.option("--contains")
-@click.option('--raw', is_flag=True)
+@click.option("--raw", is_flag=True)
 def chat(port, contains, raw):
     if contains:
         contains = [word.lower() for word in contains.split("|")]
     _filter = "tcp.port==" + str(port)
     command = ["tshark", "-Y", _filter, "-T", "fields", "-e", "data", "-l"]
     pipe = Popen(command, stdout=PIPE, stderr=None)
-    for item in pipe.stdout:
-        item = item.strip()
-        if len(item) > 0 and item[:3] == b"0dc":
-            if raw:
-                print(item)
-            message = ChatMessage(item)
+
+    for data in pipe.stdout:
+        data = codecs.decode(data.strip(), "hex")
+        if len(data) < 6:
+            continue
+        static_header = struct.unpack_from("!h", data)[0] >> 2
+
+        data_size_category = compute_size_category(static_header)
+        data_size, = struct.unpack_from(
+            "!{}".format(data_size_category), data, offset=2
+        )
+        if raw:
+            print(codecs.encode(data, "hex"))
+        data = data[2 + (static_header & BIT_MASK) :]
+        if static_header == 881:
+            message = ChatMessage(data)
             if contains:
                 for word in contains:
-                    if word in message.message_content.lower():
+                    if word in message.message:
+                        print("J'ai matché" + word)
                         print(message)
                         break
             else:
                 print(message)
 
 
-canals = {9: "Guilde", 2: "Privé", 6: "Recrutement", 5: "Commerce", 14: "FR", 0: "Général"}
+def compute_size_category(static_header):
+    _res = static_header & BIT_MASK
+    if _res == 1:
+        return "B"
+    elif _res == 2:
+        return "H"
+    # TODO Add other masks
+    return "B"
 
 
-def hexa_to_int(bytes_data):
-    if not bytes_data:
-        return 0
-    return int(bytes_data.decode("utf8"), 16)
-
-
-def hexa_to_ascii(bytes_data):
-    try:
-        return codecs.decode(bytes_data, "hex").decode("utf8")
-    except:
-        return "ERROR could not convert message {}".format(bytes_data)
+canals = {
+    9: "Guilde",
+    2: "Privé",
+    6: "Recrutement",
+    5: "Commerce",
+    14: "FR",
+    0: "Général",
+}
 
 
 class ChatMessage:
-    def __init__(self, raw_packet):
-        self.canal = hexa_to_int(raw_packet[6:8])
-        _message_len = hexa_to_int(raw_packet[8:12]) * 2
-        _message_end = 12 + _message_len
-        self.message_content = hexa_to_ascii(raw_packet[12:_message_end])
-        _timestamp_end = _message_end + 8
-        self.timestamp = hexa_to_int(raw_packet[_message_end:_timestamp_end])
-        _name_len_end = _timestamp_end + 2 + 38
-        _name_len = hexa_to_int(raw_packet[_timestamp_end + 38 : _name_len_end])
-        _name_end = _name_len_end + _name_len * 2
-        self.name = hexa_to_ascii(raw_packet[_name_len_end:_name_end])
+    def __init__(self, data):
+        self.message = " "
+        try:
+            self.canal, _message_len = struct.unpack_from("!BH", data)
+            self.message, self.timestamp, _fingerprint, _name_len = struct.unpack_from(
+                "!{}si18sh".format(_message_len), data, offset=3
+            )
+            self.name, = struct.unpack_from(
+                "!{}s".format(_name_len), data, offset=27 + _message_len
+            )
+            self.message = codecs.decode(self.message, "utf8")
+            self.name = codecs.decode(self.name, "utf8")
+        except Exception:
+            print("Could not parse {}".format(data))
 
     def __repr__(self):
         if self.canal not in canals:
@@ -79,9 +100,7 @@ class ChatMessage:
             )
 
         else:
-            return "({}) {} : {}".format(
-                canals[self.canal], self.name, self.message_content
-            )
+            return "({}) {} : {}".format(canals[self.canal], self.name, self.message)
 
 
 if __name__ == "__main__":
