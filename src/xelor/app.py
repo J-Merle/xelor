@@ -1,11 +1,14 @@
 import codecs
 import struct
-from os import popen
+from os import getenv, popen
+from pathlib import Path
 from subprocess import PIPE, Popen
 
 import click
 
-from .message import ChatMessage
+from .datastore import D2oReader
+from .message import ChatMessage, HDVMessage
+from .network import listen_packets
 
 BIT_MASK = 3
 
@@ -25,7 +28,7 @@ def scan():
 
 @cli.command()
 @click.option("--port", required=True, type=int)
-@click.option("--contains")
+@click.option("--contains", type=click.STRING)
 @click.option("--raw", is_flag=True)
 def chat(port, contains, raw):
     if contains:
@@ -52,11 +55,53 @@ def chat(port, contains, raw):
             if contains:
                 for word in contains:
                     if word in message.message:
-                        print("J'ai matché" + word)
                         print(message)
                         break
             else:
                 print(message)
+
+
+@cli.command()
+@click.option("--port", required=True, type=int)
+def raw(port):
+    for header, data in listen_packets(port):
+        data = codecs.encode(data, "hex")
+        print("{} - {}".format(header, data))
+
+
+@cli.command()
+@click.option("--force", is_flag=True)
+def load(force):
+    dest_folder = Path.home().joinpath(".xelor/data")
+    if not dest_folder.exists():
+        dest_folder.mkdir(parents=True)
+    dofus_source = getenv("DOFUS_PATH", "/opt/ankama/dofus")
+    d2o_source = Path(dofus_source).joinpath("share/data/common")
+
+    d2o_reader = D2oReader()
+    for d2o_file in [
+        filename for filename in d2o_source.iterdir() if filename.suffix == ".d2o"
+    ]:
+        dest_file = dest_folder.joinpath(d2o_file.name).with_suffix(".json")
+        if not force and dest_file.exists():
+            print("{} already exists. Use --force to overwrite it.".format(d2o_file))
+            continue
+        d2o_reader.load(d2o_file)
+        with open(dest_file, "w") as f:
+            print("Writing in {}".format(dest_file))
+            f.write(d2o_reader.json)
+
+
+@cli.command()
+@click.option("--port", required=True, type=int)
+def hdv(port):
+    for header, data in listen_packets(port):
+        if header == 5752:
+            print(codecs.encode(data, 'hex'))
+            h = HDVMessage(data)
+
+
+
 
 
 def compute_size_category(static_header):
