@@ -63,10 +63,14 @@ def chat(port, contains, raw):
 
 @cli.command()
 @click.option("--port", required=True, type=int)
-def raw(port):
+@click.option("--header", "only_header", is_flag=True)
+def raw(port, only_header):
     for header, data in listen_packets(port):
         data = codecs.encode(data, "hex")
-        print("{} - {}".format(header, data))
+        if only_header:
+            print("-> {} ".format(header))
+        else:
+            print("{} - {}".format(header, data))
 
 
 @cli.command()
