@@ -18,16 +18,20 @@ def cli():
     pass
 
 
-@cli.command()
-def scan():
+def get_running_port():
     command = "netstat -op 2> /dev/null | grep Dofus.exe | grep personal-agent | awk '{print $4}' | awk -F':' '{print $2}'"
     with popen(command) as out:
         for line in out:
-            print("Dofus is running on port : " + line.strip())
+            return int(line.strip())
 
 
 @cli.command()
-@click.option("--port", required=True, type=int)
+def scan():
+    print("Dofus is running on port : {}".format(get_running_port()))
+
+
+@cli.command()
+@click.option("--port", type=int, default=get_running_port())
 @click.option("--contains", type=click.STRING)
 @click.option("--raw", is_flag=True)
 def chat(port, contains, raw):
@@ -62,7 +66,7 @@ def chat(port, contains, raw):
 
 
 @cli.command()
-@click.option("--port", required=True, type=int)
+@click.option("--port", type=int, default=get_running_port())
 @click.option("--header", "only_header", is_flag=True)
 def raw(port, only_header):
     for header, data in listen_packets(port):
@@ -97,7 +101,7 @@ def load(force):
 
 
 @cli.command()
-@click.option("--port", required=True, type=int)
+@click.option("--port", type=int, default=get_running_port())
 def hdv(port):
     for header, data in listen_packets(port):
         if header == 5752:
