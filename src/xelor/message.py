@@ -56,7 +56,8 @@ class HDVMessage(NetworkReader):
 
         self.data = data
         self.readVarInt()
-        _len, = struct.unpack_from("!H", self.data)
+        print(self.data)
+        _len, = struct.unpack_from("!h", self.data)
         self.data = self.data[2:]
         print("{} items found".format(_len))
         for _ in range(_len):

@@ -1,14 +1,12 @@
 import codecs
-import struct
 from os import getenv, popen
 from pathlib import Path
-from subprocess import PIPE, Popen
 
 import click
 
 from .datastore import D2oReader
 from .message import ChatMessage, HDVMessage
-from .network import listen_packets
+from .network import listen
 
 BIT_MASK = 3
 
@@ -37,24 +35,8 @@ def scan():
 def chat(port, contains, raw):
     if contains:
         contains = [word.lower() for word in contains.split("|")]
-    _filter = "tcp.port==" + str(port)
-    command = ["tshark", "-Y", _filter, "-T", "fields", "-e", "data", "-l"]
-    pipe = Popen(command, stdout=PIPE, stderr=None)
-
-    for data in pipe.stdout:
-        data = codecs.decode(data.strip(), "hex")
-        if len(data) < 6:
-            continue
-        static_header = struct.unpack_from("!h", data)[0] >> 2
-
-        data_size_category = compute_size_category(static_header)
-        data_size, = struct.unpack_from(
-            "!{}".format(data_size_category), data, offset=2
-        )
-        if raw:
-            print(codecs.encode(data, "hex"))
-        data = data[2 + (static_header & BIT_MASK) :]
-        if static_header == 881:
+    for header, data in listen(port):
+        if header == 881:
             message = ChatMessage(data)
             if contains:
                 for word in contains:
@@ -69,7 +51,7 @@ def chat(port, contains, raw):
 @click.option("--port", type=int, default=get_running_port())
 @click.option("--header", "only_header", is_flag=True)
 def raw(port, only_header):
-    for header, data in listen_packets(port):
+    for header, data in listen(port):
         data = codecs.encode(data, "hex")
         if only_header:
             print("-> {} ".format(header))
@@ -103,8 +85,9 @@ def load(force):
 @cli.command()
 @click.option("--port", type=int, default=get_running_port())
 def hdv(port):
-    for header, data in listen_packets(port):
+    for header, data in listen(port):
         if header == 5752:
+            print(data)
             HDVMessage(data)
 
 
