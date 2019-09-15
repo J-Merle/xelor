@@ -105,11 +105,7 @@ def load(force):
 def hdv(port):
     for header, data in listen_packets(port):
         if header == 5752:
-            print(codecs.encode(data, 'hex'))
-            h = HDVMessage(data)
-
-
-
+            HDVMessage(data)
 
 
 def compute_size_category(static_header):

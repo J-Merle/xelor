@@ -3,6 +3,8 @@ import json
 import struct
 from pathlib import Path
 
+from .network import NetworkReader
+
 canals = {
     9: "Guilde",
     2: "Privé",
@@ -39,19 +41,26 @@ class ChatMessage:
             return "({}) {} : {}".format(canals[self.canal], self.name, self.message)
 
 
-class HDVMessage:
+class HDVMessage(NetworkReader):
     def __init__(self, data):
+        super().__init__(data)
         dest_folder = Path.home().joinpath(".xelor/data/Effects.json")
         self.effect_dict = dict()
         with open(dest_folder) as f:
             self.effect_dict = json.load(f)
 
+        dest_folder = Path.home().joinpath(".xelor/data/Items.json")
+        # with open(dest_folder) as f:
+        #    self.item = json.load(f)[context]
+        #    print(json.dumps(self.item))
+
         self.data = data
-        print(self.readVarInt())
+        self.readVarInt()
         _len, = struct.unpack_from("!H", self.data)
         self.data = self.data[2:]
         print("{} items found".format(_len))
         for _ in range(_len):
+
             uid = self.readVarShort()
             _effect_len, = struct.unpack_from("!H", self.data)
             self.data = self.data[2:]
@@ -61,11 +70,10 @@ class HDVMessage:
                 effect_id = self.readVarShort()
                 value = self.readVarShort()
                 print(
-                    "{} {}".format(
-                        value,
+                    "{}".format(
                         self.effect_dict[str(effect_id)]["descriptionId"].replace(
-                            "#1{~1~2 a }#2 ", ""
-                        ),
+                            "#1{~1~2 a }#2", str(value)
+                        )
                     )
                 )
             _price_len, = struct.unpack_from("!H", self.data)
@@ -75,37 +83,3 @@ class HDVMessage:
                 prices.append(self.readVarShort())
             print(prices)
             print("\n")
-
-    def readVarShort(self):
-        offset = 0
-        value = 0
-        while True:
-            b, = struct.unpack_from("!B", self.data)
-            self.data = self.data[1:]
-            has_next = (b & 128) == 128
-            if offset > 0:
-                value = value + ((b & 127) << offset)
-            else:
-                value = value + (b & 127)
-            offset = offset + 7
-            if not has_next:
-                break
-        if value > 32767:
-            value = value - 65536
-        return value
-
-    def readVarInt(self):
-        offset = 0
-        value = 0
-        while True:
-            b, = struct.unpack_from("!B", self.data)
-            self.data = self.data[2:]
-            has_next = (b & 128) == 128
-            if offset > 0:
-                value = value + ((b & 127) << offset)
-            else:
-                value = value + (b & 127)
-            offset = offset + 7
-            if not has_next:
-                break
-        return value

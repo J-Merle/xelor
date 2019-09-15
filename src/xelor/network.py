@@ -33,3 +33,40 @@ def compute_size_category(static_header):
         return "H"
     # TODO Add other masks
     return "B"
+
+class NetworkReader:
+    def __init__(self, data):
+        self.data = data
+
+    def readVarShort(self):
+
+        offset = 0
+        value = 0
+        while True:
+            b, = struct.unpack_from("!B", self.data)
+            self.data = self.data[1:]
+            has_next = (b & 128) == 128
+            if offset > 0:
+                value = value + ((b & 127) << offset)
+            else:
+                value = value + (b & 127)
+            offset = offset + 7
+            if not has_next:
+                break
+        return value
+
+    def readVarInt(self):
+        offset = 0
+        value = 0
+        while True:
+            b, = struct.unpack_from("!B", self.data)
+            self.data = self.data[2:]
+            has_next = (b & 128) == 128
+            if offset > 0:
+                value = value + ((b & 127) << offset)
+            else:
+                value = value + (b & 127)
+            offset = offset + 7
+            if not has_next:
+                break
+        return value
