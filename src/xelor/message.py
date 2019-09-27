@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .network import NetworkReader
 
+RUNE_WEIGHT = {753: 4, 115: 10, 428: 5}
+
 canals = {
     9: "Guilde",
     2: "Privé",
@@ -55,8 +57,6 @@ class HDVMessage(NetworkReader):
         #    print(json.dumps(self.item))
 
         self.data = data
-        self.readVarInt()
-        print(self.data)
         _len, = struct.unpack_from("!h", self.data)
         self.data = self.data[2:]
         print("{} items found".format(_len))
@@ -66,21 +66,28 @@ class HDVMessage(NetworkReader):
             _effect_len, = struct.unpack_from("!H", self.data)
             self.data = self.data[2:]
             for _ in range(_effect_len):
-                _type = struct.unpack_from("!H", self.data)
+                effect_type, = struct.unpack_from("!H", self.data)
                 self.data = self.data[2:]
                 effect_id = self.readVarShort()
-                value = self.readVarShort()
-                print(
-                    "{}".format(
-                        self.effect_dict[str(effect_id)]["descriptionId"].replace(
-                            "#1{~1~2 a }#2", str(value)
+                total_weight = 0
+                if effect_type == 70:
+                    value = self.readVarShort()
+                    # print(effect_id)
+                    total_weight += RUNE_WEIGHT[effect_id]
+                    print(
+                        "{}".format(
+                            self.effect_dict[str(effect_id)]["descriptionId"].replace(
+                                "#1{~1~2 a }#2", str(value)
+                            )
                         )
                     )
-                )
+                elif effect_type == 74:
+                    print(self.read_utf())
             _price_len, = struct.unpack_from("!H", self.data)
             self.data = self.data[2:]
             prices = []
             for _ in range(_price_len):
-                prices.append(self.readVarShort())
+                prices.append(self.readVarInt())
             print(prices)
+            print("Total weight : {}".format(total_weight))
             print("\n")

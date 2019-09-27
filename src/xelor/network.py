@@ -1,4 +1,5 @@
 import binascii
+import codecs
 import socket
 import struct
 
@@ -9,6 +10,8 @@ TCP_PROTOCOL = 0x06
 def listen(port):
     sock = socket.socket(socket.PF_PACKET, socket.SOCK_RAW, socket.htons(0x800))
 
+    data_to_process = b""
+    message_len = 0
     while True:
         data = sock.recvfrom(65565)[0]
         storeobj = struct.unpack_from("!6s6sH", data)
@@ -36,30 +39,55 @@ def listen(port):
         _destination_port = storeobj[1]
 
         if _destination_port == port and len(data) > 2:
-            static_header = struct.unpack_from("!h", data)[0] >> 2
+            big = message_len > len(data_to_process)
+            if data_to_process == b"":
 
-            data_size_category = compute_size_category(static_header)
-            if data_size_category != "":
-                data_size, = struct.unpack_from(
-                    "!{}".format(data_size_category), data, offset=2
-                )
+                reader = NetworkReader(data)
+                static_header = reader.read_short()
+                BYTE_LEN_DYNAMIQUE_HEADER = static_header & BIT_MASK
+                message_id = static_header >> 2
+                message_len = 0
+                if len(reader.data) >= (BYTE_LEN_DYNAMIQUE_HEADER):
+                    if BYTE_LEN_DYNAMIQUE_HEADER == 1:
+                        message_len = reader.read_byte()
+                    elif BYTE_LEN_DYNAMIQUE_HEADER == 2:
+                        message_len = reader.read_short()
+                    elif BYTE_LEN_DYNAMIQUE_HEADER == 3:
+                        message_len = (
+                            ((reader.read_byte() & 0xFF) << 16)
+                            + ((reader.read_byte() & 0xFF) << 8)
+                            + (reader.read_byte() & 0xFF)
+                        )
+                data_to_process = reader.data
+            else:
+                data_to_process += data
 
-            data = data[2 + static_header & BIT_MASK :]
-            yield static_header, data
+            if big:
+                continue
+            else:
+                yield message_id, data_to_process
+                data_to_process = b""
 
-
-def compute_size_category(static_header):
-    _res = static_header & BIT_MASK
-    if _res == 1:
-        return "B"
-    elif _res == 2:
-        return "H"
-    # TODO Add other masks
-    return ""
 
 class NetworkReader:
     def __init__(self, data):
         self.data = data
+
+    def read_short(self):
+        res = struct.unpack_from("!h", self.data)[0]
+        self.data = self.data[2:]
+        return res
+
+    def read_byte(self):
+        res = struct.unpack_from("!B", self.data)[0]
+        self.data = self.data[1:]
+        return res
+
+    def read_utf(self):
+        _size = self.read_short()
+        text = self.data[:_size].decode("utf-8")
+        self.data = self.data[_size:]
+        return text
 
     def readVarShort(self):
 
@@ -85,7 +113,7 @@ class NetworkReader:
         value = 0
         while True:
             b, = struct.unpack_from("!B", self.data)
-            self.data = self.data[2:]
+            self.data = self.data[1:]
             has_next = (b & 128) == 128
             if offset > 0:
                 value = value + ((b & 127) << offset)
