@@ -87,18 +87,7 @@ def load(force):
 def hdv(port):
     for header, data in listen(port):
         if header == 5752:
-            print(data)
             HDVMessage(data)
-
-
-def compute_size_category(static_header):
-    _res = static_header & BIT_MASK
-    if _res == 1:
-        return "B"
-    elif _res == 2:
-        return "H"
-    # TODO Add other masks
-    return "B"
 
 
 if __name__ == "__main__":
