@@ -78,6 +78,11 @@ class NetworkReader:
         self.data = self.data[2:]
         return res
 
+    def read_int(self):
+        res = struct.unpack_from("!i", self.data)[0]
+        self.data = self.data[4:]
+        return res
+
     def read_byte(self):
         res = struct.unpack_from("!B", self.data)[0]
         self.data = self.data[1:]
@@ -89,8 +94,7 @@ class NetworkReader:
         self.data = self.data[_size:]
         return text
 
-    def readVarShort(self):
-
+    def read_var_short(self):
         offset = 0
         value = 0
         while True:
@@ -108,7 +112,7 @@ class NetworkReader:
             value = value - 65536
         return value
 
-    def readVarInt(self):
+    def read_var_int(self):
         offset = 0
         value = 0
         while True:

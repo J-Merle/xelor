@@ -3,9 +3,9 @@ import json
 import struct
 from pathlib import Path
 
+from .constants import RUNE_WEIGHT
+from .items import Effect, Item
 from .network import NetworkReader
-
-RUNE_WEIGHT = {753: 4, 115: 10, 428: 5}
 
 canals = {
     9: "Guilde",
@@ -46,48 +46,57 @@ class ChatMessage:
 class HDVMessage(NetworkReader):
     def __init__(self, data):
         super().__init__(data)
-        dest_folder = Path.home().joinpath(".xelor/data/Effects.json")
+        self.data = data
+        self.values = list()
+        items = list()
+
+        effect_file = Path.home().joinpath(".xelor/data/Effects.json")
         self.effect_dict = dict()
-        with open(dest_folder) as f:
+        with open(effect_file) as f:
             self.effect_dict = json.load(f)
 
-        dest_folder = Path.home().joinpath(".xelor/data/Items.json")
-        # with open(dest_folder) as f:
-        #    self.item = json.load(f)[context]
-        #    print(json.dumps(self.item))
+        # print(codecs.encode(self.data, "hex"))
 
-        self.data = data
-        _len, = struct.unpack_from("!h", self.data)
-        self.data = self.data[2:]
-        print("{} items found".format(_len))
-        for _ in range(_len):
+        self.read_int()  # Unknown data
+        _item_len = self.read_short()
+        print(_item_len)
 
-            uid = self.readVarShort()
-            _effect_len, = struct.unpack_from("!H", self.data)
-            self.data = self.data[2:]
+        for _ in range(_item_len):
+            # Read object data
+            # The unique id generated for the item. Not that much useful
+            self.read_var_short()
+            # The id of the generic item which the current one is an instance of
+            id_ = self.read_var_short()
+            self.read_int()  # Unknown data
+
+            # Read effects data
+            effects = dict()
+            _effect_len = self.read_short()
             for _ in range(_effect_len):
-                effect_type, = struct.unpack_from("!H", self.data)
-                self.data = self.data[2:]
-                effect_id = self.readVarShort()
-                total_weight = 0
-                if effect_type == 70:
-                    value = self.readVarShort()
-                    # print(effect_id)
-                    total_weight += RUNE_WEIGHT[effect_id]
-                    print(
-                        "{}".format(
-                            self.effect_dict[str(effect_id)]["descriptionId"].replace(
-                                "#1{~1~2 a }#2", str(value)
-                            )
-                        )
-                    )
-                elif effect_type == 74:
-                    print(self.read_utf())
-            _price_len, = struct.unpack_from("!H", self.data)
-            self.data = self.data[2:]
-            prices = []
+                effect_category = self.read_short()
+                effect_id = self.read_var_short()
+                effect_value = 0
+                effect_description = ""
+
+                if effect_category == 70:
+                    effect_value = self.read_var_short()
+                    effect_description = self.effect_dict[str(effect_id)][
+                        "descriptionId"
+                    ]
+                elif effect_category == 74:
+                    effect_description = self.read_utf()
+
+                effects[effect_id] = Effect(
+                    effect_category, effect_id, effect_value, effect_description
+                )
+
+            # read prices data
+            prices = list()
+            _price_len = self.read_short()
             for _ in range(_price_len):
-                prices.append(self.readVarInt())
-            print(prices)
-            print("Total weight : {}".format(total_weight))
-            print("\n")
+                prices.append(self.read_var_int())
+
+            item = Item(id_, effects, prices)
+            items.append(item)
+
+        self.values = sorted(items, reverse=True)
