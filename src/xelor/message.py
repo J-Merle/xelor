@@ -3,8 +3,9 @@ import json
 import struct
 from pathlib import Path
 
-from .constants import RUNE_WEIGHT
-from .items import Effect, Item
+from .datastore import EffectReader
+from .constants import RUNE_WEIGHT, EFFECT_DESCRIPTION_KEY
+from .items import Effect, Item, EffectInt, EffectString
 from .network import NetworkReader
 
 canals = {
@@ -43,52 +44,44 @@ class ChatMessage:
             return "({}) {} : {}".format(canals[self.canal], self.name, self.message)
 
 
-class HDVMessage(NetworkReader):
+class ItemMessage(NetworkReader):
     def __init__(self, data):
         super().__init__(data)
         self.data = data
         self.values = list()
         items = list()
 
-        effect_file = Path.home().joinpath(".xelor/data/Effects.json")
-        self.effect_dict = dict()
-        with open(effect_file) as f:
-            self.effect_dict = json.load(f)
+        effect_reader = EffectReader()
 
-        # print(codecs.encode(self.data, "hex"))
-
-        self.read_int()  # Unknown data
+        # Int value, we don't know what it is used for
+        self.read_int()
         _item_len = self.read_short()
         print(_item_len)
 
         for _ in range(_item_len):
             # Read object data
-            # The unique id generated for the item. Not that much useful
+            # The unique id generated for the item. This value is not used for the moment.
             self.read_var_short()
             # The id of the generic item which the current one is an instance of
             id_ = self.read_var_short()
-            self.read_int()  # Unknown data
+            # Int value, we don't know what it is used for
+            self.read_int()
 
             # Read effects data
-            effects = dict()
+            effects_int = dict()
+            effects_str = dict()
             _effect_len = self.read_short()
             for _ in range(_effect_len):
                 effect_category = self.read_short()
                 effect_id = self.read_var_short()
                 effect_value = 0
-                effect_description = ""
-
+                effect_description = effect_reader.get(effect_id)[EFFECT_DESCRIPTION_KEY]
                 if effect_category == 70:
                     effect_value = self.read_var_short()
-                    effect_description = self.effect_dict[str(effect_id)][
-                        "descriptionId"
-                    ]
+                    effects_int[effect_id] = EffectInt(effect_id, effect_value, effect_description)
                 elif effect_category == 74:
-                    effect_description = self.read_utf()
-
-                effects[effect_id] = Effect(
-                    effect_category, effect_id, effect_value, effect_description
-                )
+                    effect_value = self.read_utf()
+                    effects_str[effect_id] = EffectString(effect_id, effect_value, effect_description)
 
             # read prices data
             prices = list()
@@ -96,7 +89,7 @@ class HDVMessage(NetworkReader):
             for _ in range(_price_len):
                 prices.append(self.read_var_int())
 
-            item = Item(id_, effects, prices)
+            item = Item(id_, effects_int, effects_str, prices)
             items.append(item)
 
         self.values = sorted(items, reverse=True)

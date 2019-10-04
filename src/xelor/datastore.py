@@ -1,6 +1,7 @@
 import json
 import struct
 from collections import namedtuple
+from pathlib import Path
 
 from .singleton import Singleton
 
@@ -159,4 +160,32 @@ class D2oReader:
                     o[item[0]] = self.read_from_type(f, item[1])
                 global_json[key] = o
             self.json = json.dumps(global_json)
+
+
+class JsonReader:
+    def __init__(self, filename):
+        # TODO change the path by the solution adopted in issue #13
+        item_file = Path.home().joinpath(".xelor/data").joinpath(filename)
+        self.json = dict()
+        with open(item_file) as f:
+            self.json = json.load(f)
+
+    def get(self, id_):
+        return self.json[str(id_)]
+
+
+class EffectReader(metaclass=Singleton):
+    def __init__(self):
+        self.reader = JsonReader("Effects.json")
+
+    def get(self, id_):
+        return self.reader.get(id_)
+
+
+class ItemReader(metaclass=Singleton):
+    def __init__(self):
+        self.reader = JsonReader("Items.json")
+
+    def get(self, id_):
+        return self.reader.get(id_)
 

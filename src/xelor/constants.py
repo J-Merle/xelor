@@ -17,7 +17,7 @@ RUNE_WEIGHT = {
     176: 3,  # Prospection
     178: 10,  # Healing
     182: 30,  # Summons
-    225: 0,  # Damage Trap #TODO
+    225: 5,  # Damage Trap
     410: 7,  # PA withdrawal
     418: 5,  # Damage crit
     422: 5,  # Damage ground
@@ -31,4 +31,8 @@ RUNE_WEIGHT = {
     2825: 0,  # No more changes
 }
 
-I18N_FORMAT_CHAIN = "#1{~1~2 a }#2"
+FORMAT_CHAIN = "#1{~1~2 a }#2"
+
+ITEM_NAME_KEY = 'nameId'
+
+EFFECT_DESCRIPTION_KEY = 'descriptionId'

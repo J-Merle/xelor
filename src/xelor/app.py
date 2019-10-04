@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from .datastore import D2oReader
-from .message import ChatMessage, HDVMessage
+from .message import ChatMessage, ItemMessage
 from .network import listen
 
 BIT_MASK = 3
@@ -86,10 +86,10 @@ def load(force):
 @click.option("--port", type=int, default=get_running_port())
 @click.option("--best", type=int, default=3)
 @click.option("--max", "max_", type=int)
-def hdv(port, best, max_):
+def items(port, best, max_):
     for header, data in listen(port):
         if header == 5752:
-            reader = HDVMessage(data)
+            reader = ItemMessage(data)
             items = reader.values
             if max_ is not None:
                 items = [item for item in items if item.price <= max_]
