@@ -56,7 +56,7 @@ class ItemMessage(NetworkReader):
         # Int value, we don't know what it is used for
         self.read_int()
         _item_len = self.read_short()
-        print(_item_len)
+        print("{} items founds\n".format(_item_len))
 
         for _ in range(_item_len):
             # Read object data
@@ -74,7 +74,6 @@ class ItemMessage(NetworkReader):
             for _ in range(_effect_len):
                 effect_category = self.read_short()
                 effect_id = self.read_var_short()
-                effect_value = 0
                 effect_description = effect_reader.get(effect_id)[EFFECT_DESCRIPTION_KEY]
                 if effect_category == 70:
                     effect_value = self.read_var_short()

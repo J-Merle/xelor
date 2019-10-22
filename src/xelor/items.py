@@ -1,50 +1,56 @@
 import click
 
 from .constants import RUNE_WEIGHT, FORMAT_CHAIN, ITEM_NAME_KEY
-from .datastore import ItemReader, EffectReader
+from .datastore import ItemReader
 
 
 class Item:
     def __init__(self, id_, effects_int, effects_str, prices):
         self._effects_str = effects_str
+        self._effects_int = effects_int
         self.price = prices[0]
         self.weight = sum([effect.weight for _, effect in effects_int])
-        item_reader = ItemReader()
-        effect_reader = EffectReader()
-        self._name = item_reader.get(id_)[ITEM_NAME_KEY]
-
-        possible_effects = {effect['effectId']: EffectInt(effect['effectId'],
-                                                          max(effect["diceNum"], effect["diceSide"]),
-                                                          effect_reader.get(effect['effectId'])["descriptionId"]) for
-                            effect in item_reader.get(id_)["possibleEffects"]}
-
-        self._compared_effects = list()
-        possible_ids = {effect['effectId'] for effect in possible_effects}
-        present_ids = {effect.effect_id for effect in effects_int}
-
-        # Compare possible and present effects
-        for compared_id in possible_ids & present_ids:
-            self._compared_effects.append(ComparedIntEffect(effects_int[compared_id], possible_effects[compared_id]))
-
-        # Compare possible but not present effects
-        for compared_id in possible_ids - present_ids:
-            self._compared_effects.append(ComparedIntEffect(None, possible_effects[compared_id]))
-
-        # Compare possible but not present effects
-        for compared_id in present_ids - possible_ids:
-            self._compared_effects.append(ComparedIntEffect(effects_int[compared_id], None))
+        self.item_reader = ItemReader()
+        self._name = self.item_reader.get(id_)[ITEM_NAME_KEY]
+        self.jet = self._evaluate_jet(id_, effects_int)
 
     def __str__(self):
-        effects_int = '\n'.join([str(effect) for effect in self._compared_effects])
+        effects_int = '\n'.join([str(effect) + colored_diff(diff) for effect, diff in self.jet])
         effects_str = '\n'.join([str(effect) for effect in self._effects_str])
-        effects = effects_int + effects_str
-        return "{}\n{}\nPrice : {:0,.0f}\nWeight: {}\n".format(self._name, effects, self.price, self.weight)
+        return "{}\n{}{}\nPrice : {:0,.0f} K\nWeight: {}\n".format(self._name, effects_int, effects_str, self.price,
+                                                                   self.weight)
 
     def __eq__(self, other):
         return self.weight == other.weight
 
     def __lt__(self, other):
         return self.weight < other.weight
+
+    def _evaluate_jet(self, id_, effects_int):
+        jet = list()
+        base_effects = self.item_reader.effects_from_id(id_)
+        possible_ids = {effect['effectId'] for effect in base_effects}
+        present_ids = {effect.effect_id for effect in effects_int}
+
+        # Compare possible and present effects
+        for compared_id in possible_ids & present_ids:
+            effect = effects_int[compared_id]
+            possible_effect = base_effects[compared_id]
+            jet.append((effects_int[compared_id], effect - possible_effect))
+
+        # Effects not present
+        for compared_id in possible_ids - present_ids:
+            effect = base_effects[compared_id]
+            diff = effect.value
+            effect.value = 0
+            jet.append((effect, -diff))
+
+        # New effects
+        for compared_id in present_ids - possible_ids:
+            effect = effects_int[compared_id]
+            jet.append((effect, effect.value))
+
+        return jet
 
 
 class Effect:
@@ -53,6 +59,8 @@ class Effect:
         self.value = value
         self.description = ""
 
+    def __str__(self):
+        return "{:24}".format(self.description)
 
 class EffectInt(Effect):
     def __init__(self, effect_id, value, raw_description):
@@ -62,8 +70,8 @@ class EffectInt(Effect):
         self.description = raw_description.replace(FORMAT_CHAIN, str(self.value))
         self.weight = RUNE_WEIGHT[effect_id] * value
 
-    def __str__(self):
-        return "{:24}".format(self.description)
+    def __sub__(self, other):
+        return self.value - other.value
 
 
 class EffectString(Effect):
@@ -71,35 +79,12 @@ class EffectString(Effect):
         super().__init__(effect_id, value)
         self.description = raw_description[:-2] + self.value
 
-    def __str__(self):
-        return self.description
 
-
-class ComparedIntEffect:
-    def __init__(self, base_effect, relative_effect):
-        self.effect = base_effect
-        self.diff = 0
-        if base_effect is None:
-            if relative_effect is None:
-                raise ValueError("At least on effect must be specified")
-            else:
-                self.diff = - relative_effect.value
-                self.effect = EffectInt(relative_effect.id, 0, relative_effect.raw_description)
-        else:
-            if relative_effect is None:
-                self.diff = base_effect.value
-            else:
-                self.diff = relative_effect.value - base_effect.value
-            self.effect = base_effect
-
-    def __str__(self):
-        return str(self.effect) + self.colored_diff()
-
-    def colored_diff(self):
-        colored_string = "{:=+5d}".format(self.diff)
-        if self.diff == 0:
-            return click.style(colored_string, fg='green')
-        elif self.diff < 0:
-            return click.style(colored_string, fg='red')
-        elif self.diff > 0:
-            return click.style(colored_string, fg='blue')
+def colored_diff(value):
+    colored_string = "{:=+5d}".format(value)
+    if value == 0:
+        return click.style(colored_string, fg='green')
+    elif value < 0:
+        return click.style(colored_string, fg='red')
+    else:
+        return click.style(colored_string, fg='blue')

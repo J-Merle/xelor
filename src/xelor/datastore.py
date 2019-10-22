@@ -4,6 +4,7 @@ from collections import namedtuple
 from pathlib import Path
 
 from .singleton import Singleton
+from .items import EffectInt
 
 Class = namedtuple("Class", "name package fields")
 
@@ -189,3 +190,9 @@ class ItemReader(metaclass=Singleton):
     def get(self, id_):
         return self.reader.get(id_)
 
+    def effects_from_id(self, id_):
+        effect_reader = EffectReader()
+        return {effect['effectId']: EffectInt(effect['effectId'],
+                                              max(effect["diceNum"], effect["diceSide"]),
+                                              effect_reader.get(effect['effectId'])["descriptionId"]) for
+                effect in self.get(id_)["possibleEffects"]}
