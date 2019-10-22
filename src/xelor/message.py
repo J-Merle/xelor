@@ -3,9 +3,10 @@ import json
 import struct
 from pathlib import Path
 
+from .datastore import EffectReader
+from .constants import RUNE_WEIGHT, EFFECT_DESCRIPTION_KEY
+from .items import Effect, Item, EffectInt, EffectString
 from .network import NetworkReader
-
-RUNE_WEIGHT = {753: 4, 115: 10, 428: 5}
 
 canals = {
     9: "Guilde",
@@ -43,51 +44,51 @@ class ChatMessage:
             return "({}) {} : {}".format(canals[self.canal], self.name, self.message)
 
 
-class HDVMessage(NetworkReader):
+class ItemMessage(NetworkReader):
     def __init__(self, data):
         super().__init__(data)
-        dest_folder = Path.home().joinpath(".xelor/data/Effects.json")
-        self.effect_dict = dict()
-        with open(dest_folder) as f:
-            self.effect_dict = json.load(f)
-
-        dest_folder = Path.home().joinpath(".xelor/data/Items.json")
-        # with open(dest_folder) as f:
-        #    self.item = json.load(f)[context]
-        #    print(json.dumps(self.item))
-
         self.data = data
-        _len, = struct.unpack_from("!h", self.data)
-        self.data = self.data[2:]
-        print("{} items found".format(_len))
-        for _ in range(_len):
+        self.values = list()
+        items = list()
 
-            uid = self.readVarShort()
-            _effect_len, = struct.unpack_from("!H", self.data)
-            self.data = self.data[2:]
+        effect_reader = EffectReader()
+
+        # Int value, we don't know what it is used for
+        self.read_int()
+        _item_len = self.read_short()
+        print("{} items founds\n".format(_item_len))
+
+        for _ in range(_item_len):
+            # Read object data
+            # The unique id generated for the item. This value is not used for the moment.
+            self.read_var_short()
+            # The id of the generic item which the current one is an instance of
+            id_ = self.read_var_short()
+            # Int value, we don't know what it is used for
+            self.read_int()
+
+            # Read effects data
+            effects_int = dict()
+            effects_str = dict()
+            _effect_len = self.read_short()
             for _ in range(_effect_len):
-                effect_type, = struct.unpack_from("!H", self.data)
-                self.data = self.data[2:]
-                effect_id = self.readVarShort()
-                total_weight = 0
-                if effect_type == 70:
-                    value = self.readVarShort()
-                    # print(effect_id)
-                    total_weight += RUNE_WEIGHT[effect_id]
-                    print(
-                        "{}".format(
-                            self.effect_dict[str(effect_id)]["descriptionId"].replace(
-                                "#1{~1~2 a }#2", str(value)
-                            )
-                        )
-                    )
-                elif effect_type == 74:
-                    print(self.read_utf())
-            _price_len, = struct.unpack_from("!H", self.data)
-            self.data = self.data[2:]
-            prices = []
+                effect_category = self.read_short()
+                effect_id = self.read_var_short()
+                effect_description = effect_reader.get(effect_id)[EFFECT_DESCRIPTION_KEY]
+                if effect_category == 70:
+                    effect_value = self.read_var_short()
+                    effects_int[effect_id] = EffectInt(effect_id, effect_value, effect_description)
+                elif effect_category == 74:
+                    effect_value = self.read_utf()
+                    effects_str[effect_id] = EffectString(effect_id, effect_value, effect_description)
+
+            # read prices data
+            prices = list()
+            _price_len = self.read_short()
             for _ in range(_price_len):
-                prices.append(self.readVarInt())
-            print(prices)
-            print("Total weight : {}".format(total_weight))
-            print("\n")
+                prices.append(self.read_var_int())
+
+            item = Item(id_, effects_int, effects_str, prices)
+            items.append(item)
+
+        self.values = sorted(items, reverse=True)

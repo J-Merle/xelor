@@ -1,8 +1,10 @@
 import json
 import struct
 from collections import namedtuple
+from pathlib import Path
 
 from .singleton import Singleton
+from .items import EffectInt
 
 Class = namedtuple("Class", "name package fields")
 
@@ -160,3 +162,37 @@ class D2oReader:
                 global_json[key] = o
             self.json = json.dumps(global_json)
 
+
+class JsonReader:
+    def __init__(self, filename):
+        # TODO change the path by the solution adopted in issue #13
+        item_file = Path.home().joinpath(".xelor/data").joinpath(filename)
+        self.json = dict()
+        with open(item_file) as f:
+            self.json = json.load(f)
+
+    def get(self, id_):
+        return self.json[str(id_)]
+
+
+class EffectReader(metaclass=Singleton):
+    def __init__(self):
+        self.reader = JsonReader("Effects.json")
+
+    def get(self, id_):
+        return self.reader.get(id_)
+
+
+class ItemReader(metaclass=Singleton):
+    def __init__(self):
+        self.reader = JsonReader("Items.json")
+
+    def get(self, id_):
+        return self.reader.get(id_)
+
+    def effects_from_id(self, id_):
+        effect_reader = EffectReader()
+        return {effect['effectId']: EffectInt(effect['effectId'],
+                                              max(effect["diceNum"], effect["diceSide"]),
+                                              effect_reader.get(effect['effectId'])["descriptionId"]) for
+                effect in self.get(id_)["possibleEffects"]}
